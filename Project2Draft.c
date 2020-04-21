@@ -55,13 +55,21 @@
 // Define the clock
 #define SYSCTL_RCGC2_R      	(*((volatile unsigned long *)0x400FE108))
 
+//Declare system functions
+void DisableInterrupts(void); // Disable interrupts
+void EnableInterrupts(void);  // Enable interrupts
+void WaitForInterrupt(void);  // low power mode
+
 // Global Variables
 unsigned int state;
+volatile unsigned long FallingEdges_PortF = 0;
+volatile unsigned long FallingEdges_PortD = 0;
 
 // Function Prototypes
 void PortB_Init(void);
 void PortD_Init(void);
 void PortF_Init(void);
+//void Interrupts_Init(void);
 void LEDCheck(void);
 void Delay(int e);
 void getPhotoState(void);
@@ -91,13 +99,14 @@ int main(void){
 	//unsigned long In;
 	//unsigned long reset;
 	//unsigned long count = 0;
-	unsigned long tempVar;
+	//unsigned long tempVar;
 	
+	PortF_Init(); // Sets internal device pins
 	PortB_Init(); // Sets external LED display device pins
 	PortD_Init(); // Sets external phototransistor device pins
-	PortF_Init(); // Sets internal device pins
+	EnableInterrupts();
 	
-	LEDCheck(); // Do this to confirm that the LEDs do, in fact, light up when you write to their associated ports
+	//LEDCheck(); // Do this to confirm that the LEDs do, in fact, light up when you write to their associated ports
 	
 	while(1)
 	{
@@ -106,12 +115,12 @@ int main(void){
 		//tempVar = GPIO_PORTD_DATA_R;
 		getPhotoState();
 		if(state){
-			GPIO_PORTF_DATA_R &= ~(0x0A); 	// Turn off internal LEDs
-			GPIO_PORTF_DATA_R |= 0x02; 		// Turn on internal LEDs
+			GPIO_PORTF_DATA_R &= ~(0x08); 	// Turn off internal green LEDs
+			GPIO_PORTF_DATA_R |= 0x02; 		// Turn on internal red LEDs
 			GPIO_PORTB_DATA_R |= 0x0F;			// Turn on all external LEDs
 		}
 		else{
-			GPIO_PORTF_DATA_R &= ~(0x0A); 	// Turn off internal red LED
+			GPIO_PORTF_DATA_R &= ~(0x02); 	// Turn off internal red LED
 			GPIO_PORTF_DATA_R |= 0x08; 		// Turn on internal green LED
 			GPIO_PORTB_DATA_R &= ~0x0F;			// Turn off all external LEDs
 		}
@@ -169,16 +178,99 @@ void PortF_Init(void)
   volatile unsigned long delay;
   SYSCTL_RCGC2_R |= 0x00000020;  	// 1) activate F clock
   delay = SYSCTL_RCGC2_R;        	// delay
+  FallingEdges_PortF = 0;
   GPIO_PORTF_LOCK_R = 0x4C4F434B;	// 2) unlock PortF PF0  
-  GPIO_PORTF_CR_R = 0x1F;        	// allow changes to PF4-0
+  GPIO_PORTF_CR_R = 0x1B;        	// allow changes to PF0 PF1 PF3 PF4
+  GPIO_PORTF_AMSEL_R &= ~(0x1B); 	// 3) disable analog function
+  GPIO_PORTF_PCTL_R  &= ~(0x1B); 	// 4) GPIO clear bit PCTL
+  GPIO_PORTF_DIR_R   &= ~(0x11); 	// 5) Set i/o:  0 = input (PF0, PF4)
+  GPIO_PORTF_DIR_R   |=   0x0A;  	// 5) Set i/o:  1 = output (PF1, PF3)
+  GPIO_PORTF_AFSEL_R &= ~(0x1B); 	// 6) no alternate function
+  GPIO_PORTF_PUR_R   |=   0x11;  	// 7) Enable pull up on PF0, PF4
+  GPIO_PORTF_DEN_R   |=   0x1B;  	// 8) Enable digital function (PF0, PF1, PF3, PF4)
+  
+  GPIO_PORTF_IS_R &= ~0x11;     	// (d) PF4, PF0 is edge-sensitive
+  GPIO_PORTF_IBE_R &= ~0x11;    	//     PF4, PF0 is not both edges
+  GPIO_PORTF_IEV_R &= ~0x11;    	//     PF4, PF0 falling edge event
+  GPIO_PORTF_ICR_R = 0x11;      	// (e) clear flag4, 0
+  GPIO_PORTF_IM_R |= 0x11;      	// (f) arm interrupt on PF4, PF0
+  
+  NVIC_PRI7_R = (NVIC_PRI7_R&0xFF00FFFF)|0x00A00000; // (g) priority 5 for PF4, PF0
+  NVIC_EN0_R = 0x40000000;      	// (h) enable interrupt 30 in NVIC
+  
+}
+
+//check external switch states and add to the global state
+void getPhotoState(void)
+{	
+  unsigned long In;
+  In  = GPIO_PORTD_DATA_R;	// Collect phototransistor state
+  In &= 0xF0; 				// Clear bits that we don't care about
+  state = In;
+}
+
+void GPIOPortF_Handler(void){
+	GPIO_PORTF_ICR_R = 0x1F;      // acknowledge flags plural
+	LEDCheck();
+	/*
+	unsigned int In;
+	unsigned int flags_in;
+	GPIO_PORTF_DATA_R ^= (0x08);  //Toggle internal green LED
+	
+	flags_in = GPIO_PORTF_RIS_R; //save a copy of the interrupts
+	//flags_in = GPIO_PORTF_DATA_R;
+	if ((flags_in & 0x10) >> 4) //flag4 - PF4 triggered
+	{
+		GPIO_PORTF_ICR_R = 0x10;      // acknowledge flag4
+		FallingEdges_PortF = (FallingEdges_PortF + 1) & 0x0F; //Increment and truncate (wrap) toa 4-bit value
+	} else if (flags_in & 0x01) //flag0 - PF0 triggered
+	{
+		GPIO_PORTF_ICR_R = 0x01; 			// acknowledge flag0
+		FallingEdges_PortF = 0;             // clear count
+	}
+	//set LED's:
+	In = GPIO_PORTB_DATA_R;       //Save a copy of the portB data
+	In |= FallingEdges_PortF;           // Set   PB0 PB1 PB2 PB3 as appropriate.
+	In &= FallingEdges_PortF;           // Clear PB0 PB1 PB2 PB3 as appropriate.
+	GPIO_PORTB_DATA_R = In;       // Set port b data to light LED's
+	*/
+}
+
+void GPIOPortD_Handler(void){
+	LEDCheck();
+}
+/*
+void Interrupts_Init(void){
+  // Port F Interrupts:
+  GPIO_PORTF_LOCK_R = 0x4C4F434B;   // 2) unlock PortF PF0  
+  GPIO_PORTF_CR_R = 0x11;           // allow changes to PF4, 0 
   GPIO_PORTF_AMSEL_R &= ~(0x19); 	// 3) disable analog function
   GPIO_PORTF_PCTL_R  &= ~(0x19); 	// 4) GPIO clear bit PCTL
   GPIO_PORTF_DIR_R   &= ~(0x11); 	// 5) Set i/o:  0 = input (PF0, PF4)
-  GPIO_PORTF_DIR_R   |=   0x0A;  	// 5) Set i/o:  1 = output (PF1, PF3)
+  GPIO_PORTF_DIR_R   |=   0x08;  	// 5) Set i/o:  1 = output (PF3)
   GPIO_PORTF_AFSEL_R &= ~(0x19); 	// 6) no alternate function
   GPIO_PORTF_PUR_R   |=   0x11;  	// 7) Enable pull up on PF0, PF4
-  GPIO_PORTF_DEN_R   |=   0x1B;  	// 8) Enable digital function (PF0, PF1, PF3, PF4) 
+  GPIO_PORTF_DEN_R   |=   0x19;  	// 8) Enable digital function (PF0, PF3, PF4)
+	
+  GPIO_PORTF_IS_R &= ~0x11;     	// (d) PF4, PF0 is edge-sensitive
+  GPIO_PORTF_IBE_R &= ~0x11;    	//     PF4, PF0 is not both edges
+  GPIO_PORTF_IEV_R &= ~0x11;    	//     PF4, PF0 falling edge event
+  GPIO_PORTF_ICR_R = 0x11;      	// (e) clear flag4, 0
+  GPIO_PORTF_IM_R |= 0x11;      	// (f) arm interrupt on PF4, PF0
+	
+  NVIC_PRI7_R = (NVIC_PRI7_R&0xFF00FFFF)|0x00A00000; // (g) priority 5 for PF4, PF0
+  NVIC_EN0_R = 0x40000000;      	// (h) enable interrupt 30 in NVIC
+  
+  // Port D Interrupts:
+  SYSCTL_RCGC2_R |= 0x00000008; 	// (a) activate clock for port D
+  FallingEdges_D = 0;           	// (b) initialize count and wait for clock 
+  GPIO_PORTF_CR_R = ;
+	
+	
+  // Enable Interrupts	
+  EnableInterrupts();           	// (i) Enable global Interrupt flag (I)
 }
+*/
 
 //Delay e * 100 ms
 void Delay(int e)
@@ -193,43 +285,4 @@ void Delay(int e)
 		}
 		e = e - 1;
 	}
-}
-
-//check external switch states and add to the global state
-void getPhotoState(void)
-{	
-  unsigned long In;
-  In  = GPIO_PORTD_DATA_R;	// Collect phototransistor state
-  In &= 0xF0; 				// Clear bits that we don't care about
-  state = In;
-}
-
-void GPIOPortF_Handler(void){
-	// Do Nothing
-	/*
-	unsigned int In;
-	unsigned int flags_in;
-	GPIO_PORTF_DATA_R ^= (0x08);  //Toggle internal green LED
-	
-	flags_in = GPIO_PORTF_RIS_R; //save a copy of the interrupts
-	//flags_in = GPIO_PORTF_DATA_R;
-	if ((flags_in & 0x10) >> 4) //flag4 - PF4 triggered
-	{
-		GPIO_PORTF_ICR_R = 0x10;      // acknowledge flag4
-		FallingEdges = (FallingEdges + 1) & 0x0F; //Increment and truncate (wrap) toa 4-bit value
-	} else if (flags_in & 0x01) //flag0 - PF0 triggered
-	{
-		GPIO_PORTF_ICR_R = 0x01; 			// acknowledge flag0
-		FallingEdges = 0;             // clear count
-	}
-	//set LED's:
-	In = GPIO_PORTB_DATA_R;       //Save a copy of the portB data
-	In |= FallingEdges;           // Set   PB0 PB1 PB2 PB3 as appropriate.
-	In &= FallingEdges;           // Clear PB0 PB1 PB2 PB3 as appropriate.
-	GPIO_PORTB_DATA_R = In;       // Set port b data to light LED's
-	*/
-}
-
-void GPIOPortD_Handler(void){
-	// Do Nothing
 }
