@@ -3,8 +3,6 @@
 // Group 8: Ryan McWilliams & Stephanie Meyer
 // April 20, 2020
 
-#include "tm4c123gh6pm.h"
-
 // Define port base addresses: Port B
 #define GPIO_PORTB_DATA_R       (*((volatile unsigned long *)0x400053FC))
 #define GPIO_PORTB_DIR_R        (*((volatile unsigned long *)0x40005400))
@@ -51,6 +49,12 @@
 #define GPIO_PORTF_ICR_R 		(*((volatile unsigned long *)0x4002541C))
 #define GPIO_PORTF_IM_R 		(*((volatile unsigned long *)0x40025410))
 #define GPIO_PORTF_RIS_R 		(*((volatile unsigned long *)0x40025414))
+	
+// Define Interrupt Priority and Enable Registers
+#define NVIC_PRI0_R             (*((volatile unsigned long *)0xE000E400))
+#define NVIC_PRI7_R             (*((volatile unsigned long *)0xE000E41C))
+#define NVIC_EN0_R              (*((volatile unsigned long *)0xE000E100))
+
 
 // Define the clock
 #define SYSCTL_RCGC2_R      	(*((volatile unsigned long *)0x400FE108))
@@ -62,6 +66,7 @@ void WaitForInterrupt(void);  // low power mode
 
 // Global Variables
 unsigned int state;
+unsigned long count = 0;
 volatile unsigned long FallingEdges_PortF = 0;
 volatile unsigned long FallingEdges_PortD = 0;
 
@@ -69,10 +74,10 @@ volatile unsigned long FallingEdges_PortD = 0;
 void PortB_Init(void);
 void PortD_Init(void);
 void PortF_Init(void);
-//void Interrupts_Init(void);
 void LEDCheck(void);
 void Delay(int e);
 void getPhotoState(void);
+void updateLEDs(unsigned long);
 
 /**
  * Pinout:
@@ -94,13 +99,7 @@ void getPhotoState(void);
  *  PD7 - Sensing Phototransistor 4 (Farthest the Sampling Phototransistor)
 **/
 
-int main(void){	
-	//unsigned int  remainder;
-	//unsigned long In;
-	//unsigned long reset;
-	unsigned long count = 0;
-	//unsigned long tempVar;
-	
+int main(void){		
 	PortF_Init(); // Sets internal device pins
 	PortB_Init(); // Sets external LED display device pins
 	PortD_Init(); // Sets external phototransistor device pins
@@ -110,23 +109,8 @@ int main(void){
 	
 	while(1)
 	{
-		/*
-		getPhotoState();
-		if(GPIO_PORTD_RIS_R){
-			//LEDCheck();
-		}
-		if(state){
-			count++;
-			GPIO_PORTF_DATA_R &= ~(0x08); 	// Turn off internal green LEDs
-			GPIO_PORTF_DATA_R |= 0x02; 		// Turn on internal red LEDs
-			GPIO_PORTB_DATA_R |= 0x0F;			// Turn on all external LEDs
-		}
-		else{
-			GPIO_PORTF_DATA_R &= ~(0x02); 	// Turn off internal red LED
-			GPIO_PORTF_DATA_R |= 0x08; 		// Turn on internal green LED
-			GPIO_PORTB_DATA_R &= ~0x0F;			// Turn off all external LEDs
-		}
-		*/
+		Delay(3); count++;
+		updateLEDs(count);	
 	}
 }
 
@@ -223,6 +207,15 @@ void getPhotoState(void)
   state = In;
 }
 
+void updateLEDs(unsigned long num){
+	GPIO_PORTB_DATA_R &= ~(0xF);
+	GPIO_PORTB_DATA_R |= (num&15);
+	//num&15
+	//num&7
+	//num&3
+	//num&1
+}
+
 void GPIOPortF_Handler(void){
 	// Copy the flags
 	unsigned int flags_in = GPIO_PORTF_RIS_R; //save a copy of the interrupts
@@ -241,15 +234,11 @@ void GPIOPortF_Handler(void){
 	}
 	if (flags_in & 0x01) //flag0 - PF0 triggered
 	{
-		GPIO_PORTF_ICR_R = 0x01; // Acknowledge PF4
-		// Do something else
-		GPIO_PORTF_DATA_R &= ~(0x0A); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x08); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x08); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x08); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x08); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x08); Delay(1);
-		GPIO_PORTF_DATA_R &= ~(0x0A);
+		GPIO_PORTF_ICR_R = 0x01; // Acknowledge PF0
+		//Clear all external LEDs
+		count = 0;
+		updateLEDs(count);
+		
 	}
 	flags_in = GPIO_PORTF_RIS_R;
 	if(flags_in){ // If flags remain, clear them
@@ -267,7 +256,7 @@ void GPIOPortD_Handler(void){
 void Delay(int e)
 {
   unsigned long i;
-	while(i>0)
+	while(e>0)
 	{
 		i = 1333333;  // this number means 100ms //TODO: MAKE ONE LOOP
 		while(i > 0)
