@@ -79,11 +79,11 @@ void getPhotoState(void);
  *  PB3 - LED3 (RED)
  
  *  PD0 - "Sampling" Phototransistor
- *  PD1 - Measuring Phototransistor 0 (Nearest the Sampling Phototransitor)
- *  PD2 - Measuring Phototransistor 1
- *  PD3 - Measuring Phototransistor 2
- *  PD6 - Measuring Phototransistor 3
- *  PD7 - Measuring Phototransistor 4 (Farthest the Sampling Phototransistor)
+ *  PD1 - Sensing Phototransistor 0 (Nearest the Sampling Phototransitor)
+ *  PD2 - Sensing Phototransistor 1
+ *  PD3 - Sensing Phototransistor 2
+ *  PD6 - Sensing Phototransistor 3
+ *  PD7 - Sensing Phototransistor 4 (Farthest the Sampling Phototransistor)
 **/
 
 int main(void){	
