@@ -149,25 +149,25 @@ int main(void){
 			if((dataCopy & 0x1F) == 0x1F && newShape == 0) // 0b11111 remainder (all unmasked) and we finished the previous shape
 			{											
 				sum = 0; newShape = 1; 						           // If photodiodes are all unmasked... we finished the shape!
-				continue;
 			} 
-			
-			count = 0; dataCopy &= 0x0F; // "&=" to remove additional bits
-			while (dataCopy)
-			{
-				if (!(dataCopy & 1)) {count++;} //area covered is the number of off bits
-				dataCopy = dataCopy >> 1;
-			}
-			//updateLED(count & 15); //legacy code from functionality 4
-			// ******************************************************************************************************
-	
-			// *********************************************************************
-		  // ** Functionality 5: Display the current surface area for an object **
-		  // *********************************************************************
+			else{
+				count = 0; dataCopy = dataCopy&0x0F; // "&=" to remove additional bits
+				while (!(dataCopy & 1))
+				{
+					count++; //area covered is the number of off bits
+					dataCopy = dataCopy >> 1;
+				}
+				//updateLED(count & 15); //legacy code from functionality 4
+				// ******************************************************************************************************
 		
-			sum = (sum + (count)) & 15; //increase the sum and truncate to an 8-bit number
-			updateLEDs(sum); newShape = 0;		  
-			// *********************************************************************
+				// *********************************************************************
+			  // ** Functionality 5: Display the current surface area for an object **
+			  // *********************************************************************
+			
+				sum = (sum + (5-count)) & 15; //increase the sum and truncate to an 8-bit number
+				updateLEDs(sum); newShape = 0;		  
+				// *********************************************************************
+				}
 		}
 	}
 }
