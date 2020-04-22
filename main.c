@@ -152,19 +152,21 @@ int main(void){
 			} 
 			else{
 				count = 0; dataCopy = dataCopy&0x1F; // "&=" to remove additional bits
-				while (!(dataCopy & 1))
+				while (dataCopy)
 				{
-					count++; //area covered is the number of off bits
+					if(dataCopy&1){
+						count++;
+					}
 					dataCopy = dataCopy >> 1;
 				}
 				//updateLED(count & 15); //legacy code from functionality 4
 				// ******************************************************************************************************
 		
 				// *********************************************************************
-			  // ** Functionality 5: Display the current surface area for an object **
-			  // *********************************************************************
+				// ** Functionality 5: Display the current surface area for an object **
+				// *********************************************************************
 			
-				sum = (sum + (count)) & 15; //increase the sum and truncate to an 8-bit number
+				sum = (sum + (5-count)) & 15; //increase the sum and truncate to an 8-bit number
 				updateLEDs(sum); newShape = 0;		  
 				// *********************************************************************
 				}
