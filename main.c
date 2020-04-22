@@ -82,7 +82,7 @@ void updateLEDs(unsigned long);
 
 /**
  * Pinout:
- *  PF2 - LED red  //TODO: not needed by project guidelines
+ *  PF2 - LED red
  *  PF3 - LED green
  *  PF4 - SW1 (reset)
  *
@@ -100,23 +100,44 @@ void updateLEDs(unsigned long);
 **/
 
 int main(void){		
+	unsigned long dataCopy;
 	PortF_Init(); // Sets internal device pins
 	PortB_Init(); // Sets external LED display device pins
 	PortE_Init(); // Sets external phototransistor device pins
 	EnableInterrupts();
 	
 	LEDCheck(); //TODO: not needed by project guidelines
-	
-	unsigned long int dataCopy;	
+		
 	while(1)
 	{
-		//Sanity check: indicator light for masked photodiodes
-		if((GPIO_PORTE_DATA_R&0x1F) == 0x1F){ 		// If none of the photodiodes are masked (covered)
+		// ****************************************************************************************************************************
+		// ** Functionality 2: When no phototransistor (including the sampling one) is masked, the green LED on the Tiva must be on. **
+		// ****************************************************************************************************************************
+		if ((GPIO_PORTE_DATA_R & 0x1F) == 0x1F)   // If none of the photodiodes are masked (covered)
+		{ 		
 			GPIO_PORTF_DATA_R |= 0x08;							// Set the internal LED to green
-		}
-		else{																			// If any of the photodiodes are masked (covered)
+		} else																		// If any of the photodiodes are masked (covered)
+		{																			    
 			GPIO_PORTF_DATA_R &= ~(0x08);						// Turn off the internal green LED
 		}
+		// ****************************************************************************************************************************
+
+		// ******************************************************************************************************************************
+		// ** Functionality 3: When all phototransistors (including the sampling one)  are masked, the red LED on the Tiva must be on. **
+		// ******************************************************************************************************************************
+		if ((GPIO_PORTE_DATA_R & 0x1F) == 0x00)   // If all of the photodiodes are masked (covered)
+		{
+			GPIO_PORTF_DATA_R &= ~(0x01); 					// Set the internal LED to red
+		} else																		// If any of the photodiodes are not masked (covered)
+		{
+			GPIO_PORTF_DATA_R &= ~(0x01); 					// Turn off the internal red LED
+		}
+		// ******************************************************************************************************************************
+
+			
+		// ******************************************************************************************************
+		// ** Functionality 4: Count and display the masked photodiodes whenever the sampling diode is masked. **
+		// ******************************************************************************************************
 		
 		//if sample flag is passed, check saved port data
 		if (data_ready)
@@ -129,20 +150,23 @@ int main(void){
 				sum = 0; newShape = 1; 						           // If photodiodes are all unmasked... we finished the shape!
 				continue;
 			} 
-			//else if((dataCopy & 0x1F) == 0)   	         // 0b00000 remainder (all masked)
-			//{ 			  
-			//	GPIO_PORTF_DATA_R &= ~(0x0A);
-			//	GPIO_PORTF_DATA_R |=  (0x02); //why play with the red led?
-			//}
-	
+			
 			count = 0; dataCopy &= 0x0F; // "&=" to remove additional bits
 			while (dataCopy)
 			{
 				if (!(dataCopy & 1)) {count++;} //area covered is the number of off bits
 				dataCopy = dataCopy >> 1;
 			}
+			//updateLED(count & 15); //legacy code from functionality 4
+			// ******************************************************************************************************
+	
+			// *********************************************************************
+		  // ** Functionality 5: Display the current surface area for an object **
+		  // *********************************************************************
+		
 			sum = (sum + (count)) & 15; //increase the sum and truncate to an 8-bit number
-			updateLEDs(sum); newShape = 0;
+			updateLEDs(sum); newShape = 0;		  
+			// *********************************************************************
 		}
 	}
 }
@@ -151,7 +175,7 @@ void LEDCheck(void){
 	// Make the LEDs blink three times
 	
 	GPIO_PORTB_DATA_R |= 0x0F; // Set (turn on PB0 PB1 PB2 PB3)
-	GPIO_PORTF_DATA_R &= ~(0x08); // Clear Internal
+	GPIO_PORTF_DATA_R &= ~(0x0A); GPIO_PORTF_DATA_R |= (0x02);// Clear Internal and set to red
 	Delay(1);
 	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x02); GPIO_PORTF_DATA_R |= (0x08); Delay(1);
 	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x08); GPIO_PORTF_DATA_R |= (0x02); Delay(1);
@@ -190,9 +214,9 @@ void PortE_Init(void){
   GPIO_PORTE_IS_R 	&= ~(0x20);     // (d) PE5 is edge-sensitive
   GPIO_PORTE_IBE_R 	&= ~(0x20);    	//     PE5 is not both edges
   GPIO_PORTE_IEV_R  &= ~(0x20);		  // Umm... maybe falling is rising? Since negative? //Photodiodes should have positive logic - 1 when activated, 0 when deactivated. are you sure??
-  //GPIO_PORTE_IEV_R 	|= (0x20);    	//     PE5 is a RISING edge event
+  //GPIO_PORTE_IEV_R 	|= (0x20);    //     PE5 is a RISING edge event
   GPIO_PORTE_ICR_R 	|=  (0x20);     // (e) clear flag5
-  GPIO_PORTE_IM_R 	|=  (0x20);      	// (f) arm interrupt on PE5
+  GPIO_PORTE_IM_R 	|=  (0x20);     // (f) arm interrupt on PE5
   
   //Port E: interrupt number 4, vector number 20
   NVIC_PRI1_R = (NVIC_PRI1_R&0xFFFFFF1F)| 0x0000000A0; // (g) priority 5 for port E interrupts // TODO: test
@@ -203,12 +227,10 @@ void PortF_Init(void)
 { 
   // Internal devices: 
   //     Switches: PF4 :: SW1
-  //     LED:      PF1, PF3 :: red LED, green LED //TODO: remove red LED
+  //     LED:      PF1, PF3 :: red LED, green LED
   volatile unsigned long delay;
-  SYSCTL_RCGC2_R 			|= 0x00000020;  	// 1) activate F clock
-  delay = SYSCTL_RCGC2_R;        	// delay
-  //GPIO_PORTF_LOCK_R    = 0x4C4F434B;	// 2) unlock PortF PF0  
-  //GPIO_PORTF_CR_R      = 0x01;        	// allow changes to PF0
+  SYSCTL_RCGC2_R 			|= 0x00000020; // 1) activate F clock
+  delay = SYSCTL_RCGC2_R;        	  // delay
   GPIO_PORTF_AMSEL_R  &= ~(0x1A); 	// 3) disable analog function
   GPIO_PORTF_PCTL_R   &= ~(0x1A); 	// 4) GPIO clear bit PCTL
   GPIO_PORTF_DIR_R    &= ~(0x10); 	// 5) Set i/o:  0 = input (PF4)
@@ -236,6 +258,7 @@ void updateLEDs(unsigned long num){
 	GPIO_PORTB_DATA_R = IN;
 }
 
+
 // ***********************************************************************************
 // ** FUNCTIONALITY 1: When Switch SW1 is pushed, all external LEDs must be set off **
 // ***********************************************************************************
@@ -249,18 +272,20 @@ void GPIOPortF_Handler(void){
 	if ((flags_in & 0x10) >> 4) //flag4 - PF4 (SW1) triggered
 	{
 		GPIO_PORTF_ICR_R = 0x10; // Acknowledge PF4
-		// Reset count, clear external LEDs
+		// Reset count and sum, clear external LEDs
 		count = 0;
-		updateLEDs(count);
+		sum = 0;
+		updateLEDs(sum);
 	}
 }
+// ***********************************************************************************
+
 
 // Interrupt Handler for Port E, which interfaces with the sampling photodiode
 void GPIOPortE_Handler(void){
 	photodiode_state = GPIO_PORTE_DATA_R; 			// Save the current input state
 	GPIO_PORTE_ICR_R   |=  (0x20); 							// Acknowledge the interrupt flag, PE5
-	GPIO_PORTF_DATA_R  &= ~(0x080);						  // Turn off the internal LED
-	
+
 	data_ready = 1; 														// Flag that new data is available
 }
 
