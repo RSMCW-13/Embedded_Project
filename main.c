@@ -164,7 +164,7 @@ int main(void){
 			  // ** Functionality 5: Display the current surface area for an object **
 			  // *********************************************************************
 			
-				sum = (sum + (5-count)) & 15; //increase the sum and truncate to an 8-bit number
+				sum = (sum + (count)) & 15; //increase the sum and truncate to an 8-bit number
 				updateLEDs(sum); newShape = 0;		  
 				// *********************************************************************
 				}
