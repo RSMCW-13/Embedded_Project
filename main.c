@@ -151,7 +151,7 @@ int main(void){
 				sum = 0; newShape = 1; 						           // If photodiodes are all unmasked... we finished the shape!
 			} 
 			else{
-				count = 0; dataCopy = dataCopy&0x0F; // "&=" to remove additional bits
+				count = 0; dataCopy = dataCopy&0x1F; // "&=" to remove additional bits
 				while (!(dataCopy & 1))
 				{
 					count++; //area covered is the number of off bits
