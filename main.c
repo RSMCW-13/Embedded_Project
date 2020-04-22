@@ -142,6 +142,7 @@ int main(void){
 		//if sample flag is passed, check saved port data
 		if (data_ready)
 		{
+			//LEDCheck();
 			data_ready = 0;
 			dataCopy = photodiode_state; // save a local copy of the diode state, so the interrupt won't overwrite while we process
 			
@@ -213,8 +214,8 @@ void PortE_Init(void){
 	// Interrupts:
   GPIO_PORTE_IS_R 	&= ~(0x20);     // (d) PE5 is edge-sensitive
   GPIO_PORTE_IBE_R 	&= ~(0x20);    	//     PE5 is not both edges
-  GPIO_PORTE_IEV_R  &= ~(0x20);		  // Umm... maybe falling is rising? Since negative? //Photodiodes should have positive logic - 1 when activated, 0 when deactivated. are you sure??
-  //GPIO_PORTE_IEV_R 	|= (0x20);    //     PE5 is a RISING edge event
+  //GPIO_PORTE_IEV_R  &= ~(0x01);		  // Umm... maybe falling is rising? Since negative? //Photodiodes should have positive logic - 1 when activated, 0 when deactivated. are you sure??
+  GPIO_PORTE_IEV_R 	|= (0x20);    //     PE5 is a RISING edge event
   GPIO_PORTE_ICR_R 	|=  (0x20);     // (e) clear flag5
   GPIO_PORTE_IM_R 	|=  (0x20);     // (f) arm interrupt on PE5
   
