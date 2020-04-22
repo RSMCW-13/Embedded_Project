@@ -127,10 +127,10 @@ int main(void){
 		// ******************************************************************************************************************************
 		if ((GPIO_PORTE_DATA_R & 0x1F) == 0x00)   // If all of the photodiodes are masked (covered)
 		{
-			GPIO_PORTF_DATA_R &= ~(0x01); 					// Set the internal LED to red
+			GPIO_PORTF_DATA_R |= 0x02; 					// Set the internal LED to red
 		} else																		// If any of the photodiodes are not masked (covered)
 		{
-			GPIO_PORTF_DATA_R &= ~(0x01); 					// Turn off the internal red LED
+			GPIO_PORTF_DATA_R &= ~(0x02); 					// Turn off the internal red LED
 		}
 		// ******************************************************************************************************************************
 
