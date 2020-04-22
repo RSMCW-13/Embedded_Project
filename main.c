@@ -66,10 +66,11 @@ void EnableInterrupts(void);  // Enable interrupts
 void WaitForInterrupt(void);  // low power mode
 
 // Global Variables
-unsigned long photodiode_state = 0;
-unsigned long count = 0;
-unsigned long sum = 0;
-unsigned char newShape = 0;
+unsigned long photodiode_state = 0; // a save of the most recent photodiode state
+unsigned char data_ready = 0; 			// flag to indicate that new data is ready to be processed
+unsigned long count = 0;						// area count for the most recent photodiode state
+unsigned long sum = 0;						  // running area sum
+unsigned char newShape = 0;					// indicates if a new shape has been started
 
 // Function Prototypes
 void PortB_Init(void);
@@ -106,14 +107,42 @@ int main(void){
 	
 	LEDCheck(); //TODO: not needed by project guidelines
 	
+	unsigned long int dataCopy;	
 	while(1)
 	{
-		//TODO: if sample flag is passed, check saved port data
+		//Sanity check: indicator light for masked photodiodes
 		if((GPIO_PORTE_DATA_R&0x1F) == 0x1F){ 		// If none of the photodiodes are masked (covered)
 			GPIO_PORTF_DATA_R |= 0x08;							// Set the internal LED to green
 		}
 		else{																			// If any of the photodiodes are masked (covered)
 			GPIO_PORTF_DATA_R &= ~(0x08);						// Turn off the internal green LED
+		}
+		
+		//if sample flag is passed, check saved port data
+		if (data_ready)
+		{
+			data_ready = 0;
+			dataCopy = photodiode_state; // save a local copy of the diode state, so the interrupt won't overwrite while we process
+			
+			if((dataCopy & 0x1F) == 0x1F && newShape == 0) // 0b11111 remainder (all unmasked) and we finished the previous shape
+			{											
+				sum = 0; newShape = 1; 						           // If photodiodes are all unmasked... we finished the shape!
+				continue;
+			} 
+			//else if((dataCopy & 0x1F) == 0)   	         // 0b00000 remainder (all masked)
+			//{ 			  
+			//	GPIO_PORTF_DATA_R &= ~(0x0A);
+			//	GPIO_PORTF_DATA_R |=  (0x02); //why play with the red led?
+			//}
+	
+			count = 0; dataCopy &= 0x0F; // "&=" to remove additional bits
+			while (dataCopy)
+			{
+				if (!(dataCopy & 1)) {count++;} //area covered is the number of off bits
+				dataCopy = dataCopy >> 1;
+			}
+			sum = (sum + (count)) & 15; //increase the sum and truncate to an 8-bit number
+			updateLEDs(sum); newShape = 0;
 		}
 	}
 }
@@ -122,7 +151,7 @@ void LEDCheck(void){
 	// Make the LEDs blink three times
 	
 	GPIO_PORTB_DATA_R |= 0x0F; // Set (turn on PB0 PB1 PB2 PB3)
-	GPIO_PORTF_DATA_R &= ~(0x0A); GPIO_PORTF_DATA_R |= 0x02; // Clear Internal, then set to red //todo: red is not to spec
+	GPIO_PORTF_DATA_R &= ~(0x08); // Clear Internal
 	Delay(1);
 	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x02); GPIO_PORTF_DATA_R |= (0x08); Delay(1);
 	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x08); GPIO_PORTF_DATA_R |= (0x02); Delay(1);
@@ -203,9 +232,13 @@ void PortF_Init(void)
 void updateLEDs(unsigned long num){
 	unsigned long IN = GPIO_PORTB_DATA_R; //Save the data for manipulation, to avoid flashing
 	IN &= ~(0x0F); 	    // Turn all LEDs off
-	IN |= (num & 15); 	// Turn on LEDs corresponding to value (truncated to a 4-bit number)
+	IN |= (num); 	      // Turn on LEDs corresponding to value
 	GPIO_PORTB_DATA_R = IN;
 }
+
+// ***********************************************************************************
+// ** FUNCTIONALITY 1: When Switch SW1 is pushed, all external LEDs must be set off **
+// ***********************************************************************************
 
 // Interrupt handler for Port F, which interfaces with the internal switch 1 for clearing
 void GPIOPortF_Handler(void){
@@ -220,33 +253,15 @@ void GPIOPortF_Handler(void){
 		count = 0;
 		updateLEDs(count);
 	}
-	flags_in = GPIO_PORTF_RIS_R;
-	if(flags_in){ // If flags remain, clear them (this should be redundant)
-		GPIO_PORTF_ICR_R |= 0x1F; // Clear all flags
-	}
 }
 
 // Interrupt Handler for Port E, which interfaces with the sampling photodiode
 void GPIOPortE_Handler(void){
-	unsigned long dataCopy = GPIO_PORTE_DATA_R;
+	photodiode_state = GPIO_PORTE_DATA_R; 			// Save the current input state
 	GPIO_PORTE_ICR_R   |=  (0x20); 							// Acknowledge the interrupt flag, PE5
-	GPIO_PORTF_DATA_R  &= ~(0x0A);						  // Turn off the internal LED //TODO: update to 0x08 for just the green?
+	GPIO_PORTF_DATA_R  &= ~(0x080);						  // Turn off the internal LED
 	
-	if((dataCopy & 0x1F) == 0x1F && newShape == 0){	// 0b11111 remainder (all unmasked) and we finished the previous shape										
-		sum = 0; newShape = 1; 						// If photodiodes are all unmasked... we finished the shape!
-		return;
-	}
-	else if((dataCopy & 0x1F) == 0){ 				// 0b00000 remainder (all masked)  
-		GPIO_PORTF_DATA_R &= ~(0x0A);
-		GPIO_PORTF_DATA_R |=  (0x02);
-	}
-	
-	count = 0; dataCopy >>= 1; dataCopy &= 0x1F; // Shift to remove PE0, "&=" to remove additional bits
-	while (dataCopy){
-		if (dataCopy) {count++;}
-		dataCopy >>= 1;
-	}
-	sum += (5 - count); updateLEDs(sum&15); newShape = 0;
+	data_ready = 1; 														// Flag that new data is available
 }
 
 //Delay e * 100 ms
