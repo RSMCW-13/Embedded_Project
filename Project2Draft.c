@@ -65,8 +65,8 @@ void EnableInterrupts(void);  // Enable interrupts
 void WaitForInterrupt(void);  // low power mode
 
 // Global Variables
-unsigned long state;
 unsigned long count = 0;
+unsigned long sum = 0;
 volatile unsigned long FallingEdges_PortF = 0;
 volatile unsigned long RisingEdges_PortE = 0;
 
@@ -76,7 +76,6 @@ void PortE_Init(void);
 void PortF_Init(void);
 void LEDCheck(void);
 void Delay(int e);
-void getPhotoState(void);
 void updateLEDs(unsigned long);
 
 /**
@@ -107,11 +106,11 @@ int main(void){
 	
 	while(1)
 	{
-		if((GPIO_PORTE_DATA_R&0x1F) == 0){ 	// If none of the photodiodes are triggered
-			GPIO_PORTF_DATA_R |= 0x08;				// Set the internal LED to green
+		if((GPIO_PORTE_DATA_R&0x1F) == 0x1F){ 		// If none of the photodiodes are masked (covered)
+			GPIO_PORTF_DATA_R |= 0x08;							// Set the internal LED to green
 		}
-		else{
-			GPIO_PORTF_DATA_R &= ~(0x08);			// Turn off the internal green LED
+		else{																			// If any of the photodiodes are masked (covered)
+			GPIO_PORTF_DATA_R &= ~(0x08);						// Turn off the internal green LED
 		}
 	}
 }
@@ -147,16 +146,16 @@ void PortB_Init(void)
 }
 
 void PortE_Init(void){
-	volatile unsigned long delay;
-	SYSCTL_RCGC2_R |= 0x00000010;   // 1) activate E clock
-	delay = SYSCTL_RCGC2_R;         // delay
+  volatile unsigned long delay;
+  SYSCTL_RCGC2_R |= 0x00000010;   // 1) activate E clock
+  delay = SYSCTL_RCGC2_R;         // delay
 //GPIO_PORTE_LOCK_R = 0x4C4F434B;	// 2) unlocking not necessary
-	GPIO_PORTE_AMSEL_R &= ~(0xFF);	// 3) disable analog function
-	GPIO_PORTE_PCTL_R  &= ~(0xFF);  // 4) GPIO clear bit PCTL
-	GPIO_PORTE_DIR_R   &= ~(0x1F);	// 5) Set i/o: 0 = input  (PE0, PE1, PE2, PE3, PE4, PE5)
-	GPIO_PORTE_AFSEL_R &= ~(0xFF);	// 6) no alternate function
-	//GPIO_PORTE_PUR_R |= 0xF0;		// 7) Only enable pull-up resistor for negative logic switches
-	GPIO_PORTE_DEN_R   |=   0xFF;	// 8) Enable digital function (PD0 - 7)
+  GPIO_PORTE_AMSEL_R &= ~(0x1F);	// 3) disable analog function
+  GPIO_PORTE_PCTL_R  &= ~(0x1F);  // 4) GPIO clear bit PCTL
+  GPIO_PORTE_DIR_R   &= ~(0x1F);	// 5) Set i/o: 0 = input  (PE0, PE1, PE2, PE3, PE4, PE5)
+  GPIO_PORTE_AFSEL_R &= ~(0x1F);	// 6) no alternate function
+//GPIO_PORTE_PUR_R |= 0xF0;		// 7) Only enable pull-up resistor for negative logic switches
+  GPIO_PORTE_DEN_R   |=   0x1F;	// 8) Enable digital function (PE0 - 5)
 
   GPIO_PORTE_IS_R &= ~0x01;     	// (d) PE0 is edge-sensitive
   GPIO_PORTE_IBE_R &= ~0x01;    	//     PE0 is not both edges
@@ -200,24 +199,16 @@ void PortF_Init(void)
   
 }
 
-//check external switch states and add to the global state
-void getPhotoState(void)
-{	
-  unsigned long In;
-  In  = GPIO_PORTE_DATA_R;	// Collect phototransistor state // How many bits is this, actually?
-  In &= ~(0xE0); 			// Clear bits that we don't care about
-  state = In;
-}
-
 void updateLEDs(unsigned long num){
-	GPIO_PORTB_DATA_R &= ~(0xF); 	// Turn all LEDs off
+	GPIO_PORTB_DATA_R &= ~(0x0F); 	// Turn all LEDs off
 	GPIO_PORTB_DATA_R |= (num&15); 	// Turn on LEDs corresponding to value
 }
 
 void GPIOPortF_Handler(void){
 	// Copy the flags
 	unsigned int flags_in = GPIO_PORTF_RIS_R; //save a copy of the interrupts
-	// Scan flags to determine which subroutines must be run
+	
+	// Scan the flags
 	if (flags_in & 0x01) //flag0 - PF0 (SW2) triggered
 	{
 		// Do Nothing
@@ -232,7 +223,7 @@ void GPIOPortF_Handler(void){
 		
 	}
 	flags_in = GPIO_PORTF_RIS_R;
-	if(flags_in){ // If flags remain, clear them
+	if(flags_in){ // If flags remain, clear them (this will be redundant once flag0 is disarmed)
 		GPIO_PORTF_ICR_R = 0x1F; // Clear all flags
 	}
 }
@@ -241,19 +232,22 @@ void GPIOPortE_Handler(void){
 	unsigned long dataCopy = GPIO_PORTE_DATA_R;
 	GPIO_PORTE_ICR_R |= 0x01; 							// Acknowledge the interrupt flag, PE0
 	GPIO_PORTF_DATA_R &= ~(0x0A);						// Turn off the internal LED
-	if ((GPIO_PORTE_DATA_R & 0x1F) == 0x1F){// Remainder of 0b11111 means that all are triggered
-		GPIO_PORTF_DATA_R &= ~(0x0A);
+	
+	if ((GPIO_PORTE_DATA_R & 0x1F) == 0){			// Remainder of 0b00000 means that all are masked (covered)
+		GPIO_PORTF_DATA_R &= ~(0x08);				// Clear the internal LED of green
 		GPIO_PORTF_DATA_R |=  (0x02); 				// Set the internal LED to red
-		
 	}
+	else if((GPIO_PORTE_DATA_R & 0x1F) == 0x1F){	// Remainder of 0b11111 means that none are masked (covered)
+		sum = 0; updateLEDs(sum);										// If no photodiodes are masked... we finished the shape!
+		return;
+	}
+	
 	count = 0; dataCopy >>= 1; dataCopy &= 0x1F;
 	while (dataCopy){
 		if (dataCopy) {count++;}
 		dataCopy >>= 1;
 	}
-	updateLEDs(count);
-	Delay(3);
-	updateLEDs(0); GPIO_PORTF_DATA_R &= ~(0x0A); // Close out
+	sum += (5 - count); updateLEDs(sum&15);
 }
 
 //Delay e * 100 ms
