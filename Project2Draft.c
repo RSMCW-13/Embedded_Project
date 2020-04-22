@@ -105,14 +105,13 @@ int main(void){
 	PortE_Init(); // Sets external phototransistor device pins
 	EnableInterrupts();
 	
-	//LEDCheck(); // Do this to confirm that the LEDs do, in fact, light up when you write to their associated ports
-	
 	while(1)
 	{
-		Delay(3); count++;
-		updateLEDs(count);
 		if((GPIO_PORTE_DATA_R&0x1F) == 0){ 	// If none of the photodiodes are triggered
 			GPIO_PORTF_DATA_R |= 0x08;				// Set the internal LED to green
+		}
+		else{
+			GPIO_PORTF_DATA_R &= ~(0x08);			// Turn off the internal green LED
 		}
 	}
 }
@@ -221,20 +220,13 @@ void GPIOPortF_Handler(void){
 	// Scan flags to determine which subroutines must be run
 	if (flags_in & 0x01) //flag0 - PF0 (SW2) triggered
 	{
-		GPIO_PORTF_ICR_R = 0x10;// Acknowledge PF0
-		// Do something
-		GPIO_PORTF_DATA_R &= ~(0x0A); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x02); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x02); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x02); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x02); Delay(1);
-		GPIO_PORTF_DATA_R ^=  (0x02); Delay(1);
-		GPIO_PORTF_DATA_R &= ~(0x0A);
+		// Do Nothing
+		// You should de-arm this interrupt entirely
 	}
 	if ((flags_in & 0x10) >> 4) //flag4 - PF4 (SW1) triggered
 	{
 		GPIO_PORTF_ICR_R = 0x01; // Acknowledge PF0
-		//Clear all external LEDs
+		// Reset count, clear external LEDs
 		count = 0;
 		updateLEDs(count);
 		
@@ -246,14 +238,22 @@ void GPIOPortF_Handler(void){
 }
 
 void GPIOPortE_Handler(void){
-	volatile unsigned long int E_flags_in = GPIO_PORTE_RIS_R;
-	GPIO_PORTE_ICR_R |= 0x01; 					// Acknowledge the interrupt flag, PE0
-	if ((GPIO_PORTE_DATA_R & 0x1F) == 0x1F){ 		// Remainder of 0b11111 means that all are triggered
+	unsigned long dataCopy = GPIO_PORTE_DATA_R;
+	GPIO_PORTE_ICR_R |= 0x01; 							// Acknowledge the interrupt flag, PE0
+	GPIO_PORTF_DATA_R &= ~(0x0A);						// Turn off the internal LED
+	if ((GPIO_PORTE_DATA_R & 0x1F) == 0x1F){// Remainder of 0b11111 means that all are triggered
 		GPIO_PORTF_DATA_R &= ~(0x0A);
-		GPIO_PORTF_DATA_R |=  (0x02); 			// Set the internal LED to red
+		GPIO_PORTF_DATA_R |=  (0x02); 				// Set the internal LED to red
+		
 	}
-	Delay(6);
-	LEDCheck();
+	count = 0; dataCopy >>= 1; dataCopy &= 0x1F;
+	while (dataCopy){
+		if (dataCopy) {count++;}
+		dataCopy >>= 1;
+	}
+	updateLEDs(count);
+	Delay(3);
+	updateLEDs(0); GPIO_PORTF_DATA_R &= ~(0x0A); // Close out
 }
 
 //Delay e * 100 ms
