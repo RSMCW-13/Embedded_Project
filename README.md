@@ -13,9 +13,9 @@ See the assignment Project-Phase2.docx for more details
 ## How to Use
 Open Project2Draft.c and the accompanying startup.s in a Keil uVision project; compile and load to the Tiva. I re-used the C12_EdgeInterrupt directory and project because I received obscure errors when I tried to start a project from scratch.
 ## Current development state
-The program will now perform the LEDCheck on reset. Pressing SW1 will make the internal LED blink red, and pressing SW2 will make the internal LED blink green. Shining a light over the sampling phototransistor will call LEDCheck.
+The external LEDs increment with time. Shining a light on the sampling photodiode will trigger GPIOPortE_Handler(). Strangely, shining a light on the sensing photodiodes does not appear to do anything until the interrupt fires-- then it will correctly illuminate (or not) the internal LED based on the state of all of the photodiodes.
 ## To Do
-- Refactor Port F Interrupts
-- Refactor Port D Interrupt
-- Implement Interrupt code to interpret the data from Port D and light LEDs accordingly
+- Remove SW2 functionality from Port F Interrupt
+- Refactor Port E Interrupt
+- Implement Interrupt code to interpret the data from Port D and light LEDs appropriately
 - Clean up the code for submission (remove LEDCheck and Delay functions)
