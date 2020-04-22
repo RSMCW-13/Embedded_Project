@@ -17,6 +17,7 @@
 #define GPIO_PORTE_DIR_R        (*((volatile unsigned long *)0x40024400))		
 #define GPIO_PORTE_AFSEL_R      (*((volatile unsigned long *)0x40024420))
 #define GPIO_PORTE_PUR_R        (*((volatile unsigned long *)0x40024510))
+#define GPIO_PORTE_PDR_R        (*((volatile unsigned long *)0x40024514))
 #define GPIO_PORTE_DEN_R        (*((volatile unsigned long *)0x4002451C))
 #define GPIO_PORTE_LOCK_R       (*((volatile unsigned long *)0x40024520))
 #define GPIO_PORTE_AMSEL_R      (*((volatile unsigned long *)0x40024528))
@@ -67,8 +68,7 @@ void WaitForInterrupt(void);  // low power mode
 // Global Variables
 unsigned long count = 0;
 unsigned long sum = 0;
-volatile unsigned long FallingEdges_PortF = 0;
-volatile unsigned long RisingEdges_PortE = 0;
+unsigned char newShape = 0;
 
 // Function Prototypes
 void PortB_Init(void);
@@ -103,6 +103,8 @@ int main(void){
 	PortB_Init(); // Sets external LED display device pins
 	PortE_Init(); // Sets external phototransistor device pins
 	EnableInterrupts();
+	
+	LEDCheck();
 	
 	while(1)
 	{
@@ -154,14 +156,15 @@ void PortE_Init(void){
   GPIO_PORTE_PCTL_R  &= ~(0x1F);  // 4) GPIO clear bit PCTL
   GPIO_PORTE_DIR_R   &= ~(0x1F);	// 5) Set i/o: 0 = input  (PE0, PE1, PE2, PE3, PE4, PE5)
   GPIO_PORTE_AFSEL_R &= ~(0x1F);	// 6) no alternate function
-//GPIO_PORTE_PUR_R |= 0xF0;		// 7) Only enable pull-up resistor for negative logic switches
-  GPIO_PORTE_DEN_R   |=   0x1F;	// 8) Enable digital function (PE0 - 5)
+//GPIO_PORTE_PUR_R 	 |=   0x01;		// 7) Only enable pull-up resistor for negative logic switches
+  GPIO_PORTE_DEN_R   |=   0x1F;		// 8) Enable digital function (PE0 - 5)
 
-  GPIO_PORTE_IS_R &= ~0x01;     	// (d) PE0 is edge-sensitive
-  GPIO_PORTE_IBE_R &= ~0x01;    	//     PE0 is not both edges
-  GPIO_PORTE_IEV_R |= 0x01;    		//     PE0 is a RISING edge event
-  GPIO_PORTE_ICR_R = 0x01;      	// (e) clear flag0
-  GPIO_PORTE_IM_R |= 0x01;      	// (f) arm interrupt on PE0
+  GPIO_PORTE_IS_R 	&= ~0x01;     // (d) PE0 is edge-sensitive
+  GPIO_PORTE_IBE_R 	&= ~0x01;    	//     PE0 is not both edges
+  GPIO_PORTE_IEV_R  &= ~(0x01);	// Umm... maybe falling is rising? Since negative?
+  //GPIO_PORTE_IEV_R 	|= 0x01;    	//     PE0 is a RISING edge event
+  GPIO_PORTE_ICR_R 	 = 0x01;      // (e) clear flag0
+  GPIO_PORTE_IM_R 	|= 0x01;      // (f) arm interrupt on PE0
   
   
   NVIC_PRI1_R = (NVIC_PRI1_R&0xFF00FFFF)|0x00A00000; // (g) priority 5 for PE0 // Double check "priority bits"
@@ -177,7 +180,6 @@ void PortF_Init(void)
   volatile unsigned long delay;
   SYSCTL_RCGC2_R |= 0x00000020;  	// 1) activate F clock
   delay = SYSCTL_RCGC2_R;        	// delay
-  FallingEdges_PortF = 0;
   GPIO_PORTF_LOCK_R = 0x4C4F434B;	// 2) unlock PortF PF0  
   GPIO_PORTF_CR_R = 0x1B;        	// allow changes to PF0 PF1 PF3 PF4
   GPIO_PORTF_AMSEL_R &= ~(0x1B); 	// 3) disable analog function
@@ -233,21 +235,23 @@ void GPIOPortE_Handler(void){
 	GPIO_PORTE_ICR_R |= 0x01; 							// Acknowledge the interrupt flag, PE0
 	GPIO_PORTF_DATA_R &= ~(0x0A);						// Turn off the internal LED
 	
-	if ((GPIO_PORTE_DATA_R & 0x1F) == 0){			// Remainder of 0b00000 means that all are masked (covered)
-		GPIO_PORTF_DATA_R &= ~(0x08);				// Clear the internal LED of green
-		GPIO_PORTF_DATA_R |=  (0x02); 				// Set the internal LED to red
-	}
-	else if((GPIO_PORTE_DATA_R & 0x1F) == 0x1F){	// Remainder of 0b11111 means that none are masked (covered)
-		sum = 0; updateLEDs(sum);										// If no photodiodes are masked... we finished the shape!
+	//if(dataCopy){LEDCheck();}
+	
+	if((dataCopy & 0x1F) == 0x1F && newShape == 0){	// 0b11111 remainder (all unmasked) and we finished the previous shape										
+		sum = 0; newShape = 1; 						// If photodiodes are all unmasked... we finished the shape!
 		return;
 	}
+	else if((dataCopy & 0x1F) == 0){ 				// 0b00000 remainder (all masked)  
+		GPIO_PORTF_DATA_R &= ~(0x0A);
+		GPIO_PORTF_DATA_R |=  (0x02);
+	}
 	
-	count = 0; dataCopy >>= 1; dataCopy &= 0x1F;
+	count = 0; dataCopy >>= 1; dataCopy &= 0x1F; // Shift to remove PE0, "&=" to remove additional bits
 	while (dataCopy){
 		if (dataCopy) {count++;}
 		dataCopy >>= 1;
 	}
-	sum += (5 - count); updateLEDs(sum&15);
+	sum += (5 - count); updateLEDs(sum&15); newShape = 0;
 }
 
 //Delay e * 100 ms
