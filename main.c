@@ -113,7 +113,7 @@ int main(void){
 		// ****************************************************************************************************************************
 		// ** Functionality 2: When no phototransistor (including the sampling one) is masked, the green LED on the Tiva must be on. **
 		// ****************************************************************************************************************************
-		if ((GPIO_PORTE_DATA_R & 0x1F) == 0x1F)   // If none of the photodiodes are masked (covered)
+		if ((GPIO_PORTE_DATA_R & 0x3F) == 0x3F)   // If none of the photodiodes are masked (covered)
 		{ 		
 			GPIO_PORTF_DATA_R |= 0x08;							// Set the internal LED to green
 		} else																		// If any of the photodiodes are masked (covered)
@@ -125,7 +125,7 @@ int main(void){
 		// ******************************************************************************************************************************
 		// ** Functionality 3: When all phototransistors (including the sampling one)  are masked, the red LED on the Tiva must be on. **
 		// ******************************************************************************************************************************
-		if ((GPIO_PORTE_DATA_R & 0x1F) == 0x00)   // If all of the photodiodes are masked (covered)
+		if ((GPIO_PORTE_DATA_R & 0x3F) == 0x00)   // If all of the photodiodes are masked (covered)
 		{
 			GPIO_PORTF_DATA_R |= 0x02; 					// Set the internal LED to red
 		} else																		// If any of the photodiodes are not masked (covered)
@@ -216,7 +216,6 @@ void PortE_Init(void){
 	// Interrupts:
   GPIO_PORTE_IS_R 	&= ~(0x20);     // (d) PE5 is edge-sensitive
   GPIO_PORTE_IBE_R 	&= ~(0x20);    	//     PE5 is not both edges
-  //GPIO_PORTE_IEV_R  &= ~(0x01);		  // Umm... maybe falling is rising? Since negative? //Photodiodes should have positive logic - 1 when activated, 0 when deactivated. are you sure??
   GPIO_PORTE_IEV_R 	|= (0x20);    //     PE5 is a RISING edge event
   GPIO_PORTE_ICR_R 	|=  (0x20);     // (e) clear flag5
   GPIO_PORTE_IM_R 	|=  (0x20);     // (f) arm interrupt on PE5
