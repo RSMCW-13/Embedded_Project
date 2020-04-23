@@ -103,8 +103,6 @@ int main(void){
 	PortB_Init(); // Sets external LED display device pins
 	PortE_Init(); // Sets external phototransistor device pins
 	EnableInterrupts();
-	
-	LEDCheck(); //TODO: not needed by project guidelines
 		
 	while(1)
 	{
@@ -206,7 +204,7 @@ void PortE_Init(void){
   GPIO_PORTE_IM_R 	|=  (0x20);     // (f) arm interrupt on PE5
   
   //Port E: interrupt number 4, vector number 20
-  NVIC_PRI1_R = (NVIC_PRI1_R&0xFFFFFF1F)| 0x0000000A0; // (g) priority 5 for port E interrupts // TODO: test
+  NVIC_PRI1_R = (NVIC_PRI1_R&0xFFFFFF1F)| 0x0000000A0; // (g) priority 5 for port E interrupts
   NVIC_EN0_R  = 0x00000010;      										   // (h) enable interrupt 4 in NVIC
 }
 
