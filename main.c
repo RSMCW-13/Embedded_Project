@@ -76,8 +76,6 @@ unsigned char newShape = 0;					// indicates if a new shape has been started
 void PortB_Init(void);
 void PortE_Init(void);
 void PortF_Init(void);
-void LEDCheck(void);
-void Delay(int e);
 void updateLEDs(unsigned long);
 
 /**
@@ -172,19 +170,6 @@ int main(void){
 				}
 		}
 	}
-}
-
-void LEDCheck(void){	
-	// Make the LEDs blink three times
-	
-	GPIO_PORTB_DATA_R |= 0x0F; // Set (turn on PB0 PB1 PB2 PB3)
-	GPIO_PORTF_DATA_R &= ~(0x0A); GPIO_PORTF_DATA_R |= (0x02);// Clear Internal and set to red
-	Delay(1);
-	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x02); GPIO_PORTF_DATA_R |= (0x08); Delay(1);
-	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x08); GPIO_PORTF_DATA_R |= (0x02); Delay(1);
-	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x02); GPIO_PORTF_DATA_R |= (0x08); Delay(1);
-	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x08); GPIO_PORTF_DATA_R |= (0x02); Delay(1);
-	GPIO_PORTB_DATA_R ^= 0x0F; GPIO_PORTF_DATA_R &= ~(0x02); // Clear (turn off PB1 PB2 PB3 PF1 PF3)
 }
 
 void PortB_Init(void)
@@ -289,19 +274,4 @@ void GPIOPortE_Handler(void){
 	GPIO_PORTE_ICR_R   |=  (0x20); 							// Acknowledge the interrupt flag, PE5
 
 	data_ready = 1; 														// Flag that new data is available
-}
-
-//Delay e * 100 ms
-void Delay(int e)
-{
-  unsigned long i;
-	while(e>0)
-	{
-		i = 1333333;  // this number means 100ms //TODO: MAKE ONE LOOP
-		while(i > 0)
-		{
-		  i = i - 1;
-		}
-		e = e - 1;
-	}
 }
